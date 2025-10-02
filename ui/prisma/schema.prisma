@@ -1,0 +1,136 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  owner
+  agent
+}
+
+model Account {
+  id                    String       @id @default(cuid())
+  label                 String
+  clientId              String       @unique
+  clientSecretEncrypted String
+  oauthScope           String?
+  oauthAudience        String?
+  isParent              Boolean      @default(false)
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  fleets                Fleet[]
+  sims                  Sim[]
+  scopes                UserScope[]
+  invites               InviteFleetScope[]
+  commandLogs           CommandLog[]
+}
+
+model Fleet {
+  id         String       @id @default(cuid())
+  account    Account      @relation(fields: [accountId], references: [id])
+  accountId  String
+  name       String
+  externalRef String
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  sims       Sim[]
+  scopes     UserScope[]
+  inviteScopes InviteFleetScope[]
+
+  @@unique([accountId, externalRef])
+}
+
+model User {
+  id           String      @id @default(cuid())
+  email        String      @unique
+  passwordHash String
+  role         UserRole
+  createdAt    DateTime    @default(now())
+  scopes       UserScope[]
+  invites      Invite[]    @relation("InviteCreator")
+}
+
+model UserScope {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  account   Account  @relation(fields: [accountId], references: [id])
+  accountId String
+  fleet     Fleet?   @relation(fields: [fleetId], references: [id])
+  fleetId   String?
+  canRead   Boolean  @default(false)
+  canWrite  Boolean  @default(false)
+  canInvite Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, accountId, fleetId])
+  @@index([accountId, fleetId])
+}
+
+model Sim {
+  id         String   @id @default(cuid())
+  account    Account  @relation(fields: [accountId], references: [id])
+  accountId  String
+  fleet      Fleet    @relation(fields: [fleetId], references: [id])
+  fleetId    String
+  simSid     String   @unique
+  iccid      String   @unique
+  uniqueName String?  @unique
+  status     String
+  lastSeenAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  commandLogs CommandLog[]
+
+  @@index([accountId, simSid])
+  @@index([accountId, iccid])
+  @@index([accountId, uniqueName])
+}
+
+model CommandLog {
+  id        String   @id @default(cuid())
+  account   Account  @relation(fields: [accountId], references: [id])
+  accountId String
+  sim       Sim      @relation(fields: [simId], references: [id])
+  simId     String
+  command   String
+  direction String
+  payload   String
+  createdAt DateTime @default(now())
+
+  @@index([accountId, simId, createdAt])
+}
+
+model Invite {
+  id          String             @id @default(cuid())
+  token       String             @unique
+  email       String?
+  createdBy   User               @relation("InviteCreator", fields: [createdById], references: [id])
+  createdById String
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime           @default(now())
+  scopes      InviteFleetScope[]
+}
+
+model InviteFleetScope {
+  id        String   @id @default(cuid())
+  invite    Invite   @relation(fields: [inviteId], references: [id])
+  inviteId  String
+  account   Account  @relation(fields: [accountId], references: [id])
+  accountId String
+  fleet     Fleet?   @relation(fields: [fleetId], references: [id])
+  fleetId   String?
+  canRead   Boolean  @default(false)
+  canWrite  Boolean  @default(false)
+  canInvite Boolean  @default(false)
+
+  @@index([inviteId])
+  @@index([accountId, fleetId])
+}
+
