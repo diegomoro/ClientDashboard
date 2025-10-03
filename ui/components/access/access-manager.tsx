@@ -531,7 +531,7 @@ export function AccessManager() {
         }}
         confirmLabel="Remove"
       >
-        <p>This action removes all the selected user's permissions for this account. You can re‑grant them later.</p>
+        <p>This action removes all the selected user&apos;s permissions for this account. You can re‑grant them later.</p>
       </Modal>
     </div>
   );
