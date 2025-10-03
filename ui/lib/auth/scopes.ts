@@ -21,7 +21,16 @@ export async function loadUserScopes(userId: string): Promise<Scope[]> {
     orderBy: [{ account: { label: "asc" } }, { fleet: { name: "asc" } }],
   });
 
-  return data.map((item) => ({
+  return data.map((item: {
+    id: string;
+    accountId: string;
+    account: { label: string };
+    fleetId: string | null;
+    fleet: { name: string } | null;
+    canRead: boolean;
+    canWrite: boolean;
+    canInvite: boolean;
+  }) => ({
     scopeId: item.id,
     accountId: item.accountId,
     accountLabel: item.account.label,

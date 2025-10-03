@@ -194,15 +194,15 @@ export async function listFleetsFromKore(account: KoreAccountSecret): Promise<Ko
   const fleets: KoreFleet[] = [];
   let nextPath: string | null = "/Fleets?PageSize=500";
   while (nextPath) {
-    const data = await koreFetch<FleetListResponse>(account, nextPath, { method: "GET" });
-    const items = (data.fleets ?? data.data ?? []) as Record<string, unknown>[];
+    const resp: FleetListResponse = await koreFetch<FleetListResponse>(account, nextPath, { method: "GET" });
+    const items = (resp.fleets ?? resp.data ?? []) as Record<string, unknown>[];
     for (const item of items) {
       const fleet = normalizeFleet(item);
       if (fleet.sid) {
         fleets.push(fleet);
       }
     }
-    const nextUrl = data.meta?.next_page_url ?? data.meta?.nextPageUrl ?? null;
+    const nextUrl = resp.meta?.next_page_url ?? resp.meta?.nextPageUrl ?? null;
     nextPath = nextUrl ? stripBase(String(nextUrl)) : null;
   }
   return fleets;
@@ -227,8 +227,8 @@ export async function listSimsFromKore(account: KoreAccountSecret, fleetSid: str
     try {
       while (nextPath && !visited.has(nextPath)) {
         visited.add(nextPath);
-        const data = await koreFetch<SimListResponse>(account, nextPath, { method: "GET" });
-        const items = (data.sims ?? data.data ?? []) as Record<string, unknown>[];
+        const resp: SimListResponse = await koreFetch<SimListResponse>(account, nextPath, { method: "GET" });
+        const items = (resp.sims ?? resp.data ?? []) as Record<string, unknown>[];
         for (const item of items) {
           const sim = normalizeSim(item);
           if (sim.sid) {
@@ -236,7 +236,7 @@ export async function listSimsFromKore(account: KoreAccountSecret, fleetSid: str
             fetchedAny = true;
           }
         }
-        const nextUrl = data.meta?.next_page_url ?? data.meta?.nextPageUrl ?? null;
+        const nextUrl = resp.meta?.next_page_url ?? resp.meta?.nextPageUrl ?? null;
         nextPath = nextUrl ? stripBase(String(nextUrl)) : null;
       }
     } catch (err) {
@@ -273,8 +273,8 @@ export async function listSmsLogs(
     : `/SmsCommands?Sim=${encodeURIComponent(params.simSid)}&PageSize=${params.pageSize ?? 50}${
         params.createdAfter ? `&CreatedAfter=${encodeURIComponent(params.createdAfter)}` : ""
       }`;
-  const data = await koreFetch<CommandListResponse>(account, path, { method: "GET" });
-  const items = (data.sms_commands ?? data.data ?? []) as Record<string, unknown>[];
+  const resp: CommandListResponse = await koreFetch<CommandListResponse>(account, path, { method: "GET" });
+  const items = (resp.sms_commands ?? resp.data ?? []) as Record<string, unknown>[];
   const commands: KoreCommandResult[] = items.map((item) => ({
     sid: String(item.sid ?? item.id ?? ""),
     status: String(item.status ?? "unknown"),
@@ -283,7 +283,7 @@ export async function listSmsLogs(
     simSid: String(item.sim_sid ?? item.simSid ?? ""),
     createdAt: String(item.date_created ?? item.created_at ?? new Date().toISOString()),
   }));
-  const nextUrl = data.meta?.next_page_url ?? data.meta?.nextPageUrl ?? null;
+  const nextUrl = resp.meta?.next_page_url ?? resp.meta?.nextPageUrl ?? null;
   return {
     commands,
     nextPageUrl: nextUrl ? stripBase(String(nextUrl)) : null,

@@ -1,15 +1,16 @@
 ﻿"use client";
 
 import Link from "next/link";
+import type { Route } from "next";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode } from "react";
 import { signOut, useSession } from "next-auth/react";
 import clsx from "clsx";
 import toast from "react-hot-toast";
 
-const NAV_ITEMS = [
-  { href: "/dashboard", label: "SIMs" },
-  { href: "/dashboard/access", label: "Access" },
+const NAV_ITEMS: Array<{ href: Route; label: string }> = [
+  { href: "/dashboard" as Route, label: "SIMs" },
+  { href: "/dashboard/access" as Route, label: "Access" },
 ];
 
 export function DashboardShell({ children }: { children: ReactNode }) {

@@ -45,7 +45,7 @@ export async function GET() {
 
     const visible = isOwner(context)
       ? invites
-      : invites.filter((invite) =>
+      : invites.filter((invite: { scopes: Array<{ accountId: string; fleetId: string | null }> }) =>
           invite.scopes.some((scope) =>
             context.scopes.some((userScope) => {
               if (userScope.accountId !== scope.accountId) {

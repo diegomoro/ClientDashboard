@@ -1,7 +1,6 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
 import { handleApiError } from "@/lib/api";
 import { jsonResponse } from "@/lib/response";
 import { requireAuthContext, isOwner } from "@/lib/auth/context";
@@ -9,6 +8,7 @@ import { decryptSecret } from "@/lib/crypto";
 import { sendSmsCommand } from "@/lib/kore";
 import { isSupportedCommand, isWriteCommand } from "@/lib/commands";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { sleep } from "@/utils/retry";
 
 const TargetSchema = z.object({
   accountId: z.string().min(1),
@@ -56,7 +56,14 @@ export async function POST(request: NextRequest) {
 
     const accountIds = body.accountScopedTargets.map((target) => target.accountId);
 
-    const accounts = await prisma.account.findMany({
+    const accounts: Array<{
+      id: string;
+      label: string;
+      clientId: string;
+      clientSecretEncrypted: string;
+      oauthScope: string | null;
+      oauthAudience: string | null;
+    }> = await prisma.account.findMany({
       where: { id: { in: accountIds } },
       include: {
         fleets: { select: { id: true, externalRef: true } },
@@ -73,6 +80,9 @@ export async function POST(request: NextRequest) {
       iccid: string;
       status: string;
       message: string;
+      command?: string;
+      payload?: string;
+      sentAt?: string;
     }> = [];
 
     for (const target of body.accountScopedTargets) {
@@ -95,7 +105,7 @@ export async function POST(request: NextRequest) {
         ? null
         : context.scopes.filter((scope) => scope.accountId === account.id);
 
-      const simWhere: Prisma.SimWhereInput = {
+      const simWhere: { accountId: string } & Record<string, unknown> = {
         accountId: account.id,
       };
       const identifiers: Array<Record<string, unknown>> = [];

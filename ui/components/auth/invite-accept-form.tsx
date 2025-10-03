@@ -96,7 +96,7 @@ export function InviteAcceptForm({ token }: { token: string }) {
       <div className="rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm text-neutral-600">
         <p className="font-medium text-neutral-800">Access granted:</p>
         <ul className="mt-2 space-y-1">
-          {invite.scopes.map((scope) => (
+          {(invite?.scopes ?? []).map((scope) => (
             <li key={scope.id}>
               {scope.account.label} / {scope.fleet?.name ?? "Account"} -
               {scope.canRead ? " read" : ""}
@@ -112,7 +112,7 @@ export function InviteAcceptForm({ token }: { token: string }) {
           type="email"
           value={email}
           onChange={(event) => setEmail(event.currentTarget.value)}
-          placeholder={invite.email ?? "you@example.com"}
+          placeholder={invite?.email ?? "you@example.com"}
           className="rounded-md border border-neutral-300 px-3 py-2 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200"
         />
       </label>

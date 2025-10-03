@@ -316,7 +316,7 @@ export function AccessManager() {
                             scope: user.scopes.find((scope) => scope.accountId === account.id && scope.fleetId === fleet.id),
                           }));
                           const isExpanded = expandedAccounts[account.id] ?? false;
-                          const rows = [{ label: "Account-wide", fleetId: null, scope: accountLevel } as const].concat(
+                          const rows = [{ label: "Account-wide", fleetId: null as string | null, scope: accountLevel }].concat(
                             isExpanded ? fleetRows.map((row) => ({ label: row.fleet.name, fleetId: row.fleet.id, scope: row.scope })) : [],
                           );
                           return rows.map((row, index) => (

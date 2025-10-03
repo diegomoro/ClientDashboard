@@ -13,7 +13,6 @@ const CredentialsSchema = z.object({
 });
 
 export const authOptions: NextAuthOptions = {
-  trustHost: true,
   secret: process.env.NEXTAUTH_SECRET,
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
@@ -77,7 +76,7 @@ export const authOptions: NextAuthOptions = {
       session.user = {
         ...(session.user ?? {}),
         id: String(token.userId),
-        role: (token.role as string) ?? "agent",
+        role: (token.role as "owner" | "agent") ?? "agent",
         scopes,
       };
       return session;
