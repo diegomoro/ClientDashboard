@@ -189,7 +189,7 @@ export function SimConsole({ hasAccess }: { hasAccess: boolean }) {
         .toLowerCase()
         .includes(query),
     );
-  }, [sims, debouncedSearch, accountFilter]);
+  }, [sims, debouncedSearch, accountFilter, fleetFilter]);
 
   const parentRef = useRef<HTMLDivElement | null>(null);
   const rowVirtualizer = useVirtualizer({
@@ -200,7 +200,7 @@ export function SimConsole({ hasAccess }: { hasAccess: boolean }) {
   });
 
   const timersRef = useRef<number[]>([]);
-  function scheduleResultChecks(_results: CommandResult[]) {
+  function scheduleResultChecks(results: CommandResult[]) {
     // Clear any prior scheduled checks to avoid stacking
     for (const id of timersRef.current) {
       clearTimeout(id);
@@ -210,7 +210,7 @@ export function SimConsole({ hasAccess }: { hasAccess: boolean }) {
     let elapsed = 0;
     for (const delay of delays) {
       elapsed += delay;
-      const id = window.setTimeout(() => checkResultsOnce(lastResults), elapsed);
+      const id = window.setTimeout(() => checkResultsOnce(results), elapsed);
       timersRef.current.push(id);
     }
   }
@@ -222,7 +222,7 @@ export function SimConsole({ hasAccess }: { hasAccess: boolean }) {
   }, []);
 
   async function checkResultsOnce(results: CommandResult[]) {
-    const pending = lastResults.filter((r) => r.status === "queued");
+    const pending = results.filter((r) => r.status === "queued");
     if (!pending.length) return;
     try {
       const updates: Record<string, { status: string; message: string }> = {};

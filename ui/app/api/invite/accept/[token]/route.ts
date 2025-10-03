@@ -2,6 +2,7 @@
 import bcrypt from "bcrypt";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import { jsonResponse } from "@/lib/response";
 import { handleApiError } from "@/lib/api";
 
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const passwordHash = await bcrypt.hash(parsed.data.password, 12);
 
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const user = await tx.user.create({
         data: {
           email: parsed.data.email.toLowerCase(),

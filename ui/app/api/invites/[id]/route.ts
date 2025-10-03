@@ -1,6 +1,7 @@
 import { requireAuthContext, isOwner } from "@/lib/auth/context";
 import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import { jsonResponse } from "@/lib/response";
 import { enforceRateLimit } from "@/lib/rate-limit";
 
@@ -22,7 +23,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       return jsonResponse({ error: "Only the owner can revoke invites" }, { status: 403 });
     }
 
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await tx.inviteFleetScope.deleteMany({ where: { inviteId: id } });
       await tx.invite.delete({ where: { id } });
     });

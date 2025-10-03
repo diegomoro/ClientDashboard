@@ -27,7 +27,7 @@ export function getEnv(): RawEnv {
     const firstIssue = parsed.error.issues[0];
     const key = firstIssue?.path?.[0];
     const message = key
-      ? `[env] Missing or invalid ${key}. Set it in ui/.env (see ui/.env.example).`
+      ? `[env] Missing or invalid ${String(key)}. Set it in ui/.env (see ui/.env.example).`
       : `[env] Invalid environment configuration. Review ui/.env.`;
     throw new Error(message);
   }

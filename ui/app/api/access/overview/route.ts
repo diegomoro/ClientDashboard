@@ -25,7 +25,7 @@ export async function GET() {
     let accountIds: string[];
     if (isOwner(context)) {
       const accounts = await prisma.account.findMany({ select: { id: true } });
-      accountIds = accounts.map((account) => account.id);
+      accountIds = accounts.map((account: { id: string }) => account.id);
     } else {
       const readable = context.scopes.filter((scope) => scope.canRead);
       accountIds = Array.from(new Set(readable.map((scope) => scope.accountId)));
@@ -103,3 +103,9 @@ export async function GET() {
     return handleApiError(error);
   }
 }
+
+
+
+
+
+

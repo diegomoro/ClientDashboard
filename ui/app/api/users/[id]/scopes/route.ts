@@ -1,6 +1,7 @@
 ﻿import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import { requireAuthContext, isOwner } from "@/lib/auth/context";
 import { jsonResponse } from "@/lib/response";
 import { handleApiError } from "@/lib/api";
@@ -61,7 +62,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const updates = parsed.data.scopes;
 
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       for (const scope of updates) {
         if (!scope.canRead && !scope.canWrite && !scope.canInvite) {
           await tx.userScope.deleteMany({

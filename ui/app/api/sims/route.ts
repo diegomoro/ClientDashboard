@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     const accountFilters = search.getAll("accountId").concat(search.getAll("accountId[]"));
     const fleetFilters = search.getAll("fleetId").concat(search.getAll("fleetId[]"));
 
-    let whereClause: Parameters<typeof prisma.sim.findMany>[0]["where"] | undefined;
+    let whereClause: { accountId?: { in: string[] }; fleetId?: { in: string[] } } | undefined;
 
     if (isOwner(context)) {
       whereClause = {};
@@ -67,7 +67,18 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    const payload = sims.map((sim) => ({
+    const payload = sims.map((sim: {
+      id: string;
+      accountId: string;
+      account: { label: string };
+      fleetId: string;
+      fleet: { name: string; externalRef: string };
+      simSid: string;
+      iccid: string;
+      uniqueName: string | null;
+      status: string;
+      lastSeenAt: Date | null;
+    }) => ({
       id: sim.id,
       accountId: sim.accountId,
       accountLabel: sim.account.label,

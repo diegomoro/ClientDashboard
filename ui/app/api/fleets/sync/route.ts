@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
         targetAccountIds = body.accountIds;
       } else {
         const all = await prisma.account.findMany({ select: { id: true } });
-        targetAccountIds = all.map((account) => account.id);
+        targetAccountIds = all.map((account: { id: string }) => account.id);
       }
     } else {
       const readableAccountIds = Array.from(
@@ -50,7 +50,14 @@ export async function POST(request: NextRequest) {
         : readableAccountIds;
     }
 
-    const accounts = await prisma.account.findMany({
+    const accounts: Array<{
+      id: string;
+      label: string;
+      clientId: string;
+      clientSecretEncrypted: string;
+      oauthScope: string | null;
+      oauthAudience: string | null;
+    }> = await prisma.account.findMany({
       where: { id: { in: targetAccountIds } },
     });
 
