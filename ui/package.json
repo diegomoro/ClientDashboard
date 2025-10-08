@@ -4,13 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
-    "build": "next build",
+    "build": "npm run prisma:generate:prod && next build",
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "prisma:generate": "prisma generate",
+    "prisma:generate:prod": "prisma generate --schema prisma/schema.postgres.prisma",
     "prisma:push": "prisma db push --skip-generate"
   },
   "dependencies": {

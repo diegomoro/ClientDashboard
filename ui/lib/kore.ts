@@ -157,6 +157,11 @@ async function koreFetch<T>(account: KoreAccountSecret, path: string, init?: Req
     const detail = await safeJson(response);
     throw new KoreHttpError(response.status, detail, `KORE API request failed (${response.status}): ${JSON.stringify(detail)}`);
   }
+  const ct = response.headers.get("content-type") ?? "";
+  if (!ct.includes("application/json")) {
+    const text = await response.text();
+    throw new KoreHttpError(502, { body: text.slice(0, 500) }, "KORE returned non-JSON response");
+  }
   return (await response.json()) as T;
 }
 
