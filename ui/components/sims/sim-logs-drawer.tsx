@@ -19,11 +19,18 @@ async function fetchLogs({ pageParam, simId, accountId }: { pageParam?: string |
     url.searchParams.set("cursor", pageParam);
   }
   const response = await fetch(url.toString(), { cache: "no-store" });
-  const body = await response.json();
-  if (!response.ok) {
-    throw new Error(body?.error ?? "Failed to load logs");
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    const body = await response.json();
+    if (!response.ok) {
+      throw new Error(body?.error ?? "Failed to load logs");
+    }
+    return body as { logs: Array<{ sid: string; status: string; payload: string; command: string; createdAt: string }>; nextCursor?: string | null };
   }
-  return body as { logs: Array<{ sid: string; status: string; payload: string; command: string; createdAt: string }>; nextCursor?: string | null };
+  // Fallback: non-JSON (likely an HTML error page). Surface a readable error.
+  const text = await response.text();
+  const snippet = text.slice(0, 200).trim();
+  throw new Error(snippet || `Unexpected non-JSON response (status ${response.status})`);
 }
 
 export function SimLogsDrawer({ target, onClose }: { target: SimLogTarget | null; onClose: () => void }) {

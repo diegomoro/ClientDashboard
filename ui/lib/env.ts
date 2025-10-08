@@ -22,7 +22,20 @@ export function getEnv(): RawEnv {
   if (cachedEnv) {
     return cachedEnv;
   }
-  const parsed = EnvSchema.safeParse(process.env);
+  // Provide sensible fallbacks for Vercel/preview to avoid brittle setup.
+  // If NEXTAUTH_URL is not set, derive it from VERCEL_URL (production/preview)
+  // or localhost for development.
+  const derivedNextAuthUrl =
+    process.env.NEXTAUTH_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined) ||
+    (process.env.NODE_ENV === "development" ? "http://localhost:3000" : undefined);
+
+  const envWithFallbacks = {
+    ...process.env,
+    NEXTAUTH_URL: derivedNextAuthUrl,
+  } as NodeJS.ProcessEnv;
+
+  const parsed = EnvSchema.safeParse(envWithFallbacks);
   if (!parsed.success) {
     const firstIssue = parsed.error.issues[0];
     const key = firstIssue?.path?.[0];
