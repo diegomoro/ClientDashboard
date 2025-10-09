@@ -61,47 +61,52 @@ export async function POST(request: NextRequest) {
       where: { id: { in: targetAccountIds } },
     });
 
-    const results: Array<{ accountId: string; fleets: number }> = [];
+    const results: Array<{ accountId: string; fleets: number; error?: string }> = [];
 
     await sequentialProcess(accounts, async (account) => {
-      const secret = decryptSecret(account.clientSecretEncrypted);
-      const fleets = await listFleetsFromKore({
-        label: account.label,
-        clientId: account.clientId,
-        clientSecret: secret,
-        scope: account.oauthScope ?? undefined,
-        audience: account.oauthAudience ?? undefined,
-      });
-
-      for (const fleet of fleets) {
-        const upserted = await prisma.fleet.upsert({
-          where: { accountId_externalRef: { accountId: account.id, externalRef: fleet.sid } },
-          update: { name: fleet.friendlyName, accountId: account.id },
-          create: { accountId: account.id, name: fleet.friendlyName, externalRef: fleet.sid },
+      try {
+        const secret = decryptSecret(account.clientSecretEncrypted);
+        const fleets = await listFleetsFromKore({
+          label: account.label,
+          clientId: account.clientId,
+          clientSecret: secret,
+          scope: account.oauthScope ?? undefined,
+          audience: account.oauthAudience ?? undefined,
         });
 
-        if (isOwner(context)) {
-          await prisma.userScope.upsert({
-            where: {
-              userId_accountId_fleetId: {
+        for (const fleet of fleets) {
+          const upserted = await prisma.fleet.upsert({
+            where: { accountId_externalRef: { accountId: account.id, externalRef: fleet.sid } },
+            update: { name: fleet.friendlyName, accountId: account.id },
+            create: { accountId: account.id, name: fleet.friendlyName, externalRef: fleet.sid },
+          });
+
+          if (isOwner(context)) {
+            await prisma.userScope.upsert({
+              where: {
+                userId_accountId_fleetId: {
+                  userId: context.userId,
+                  accountId: account.id,
+                  fleetId: upserted.id,
+                },
+              },
+              update: { canRead: true, canWrite: true, canInvite: true },
+              create: {
                 userId: context.userId,
                 accountId: account.id,
                 fleetId: upserted.id,
+                canRead: true,
+                canWrite: true,
+                canInvite: true,
               },
-            },
-            update: { canRead: true, canWrite: true, canInvite: true },
-            create: {
-              userId: context.userId,
-              accountId: account.id,
-              fleetId: upserted.id,
-              canRead: true,
-              canWrite: true,
-              canInvite: true,
-            },
-          });
+            });
+          }
         }
+        results.push({ accountId: account.id, fleets: fleets.length });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "sync failed";
+        results.push({ accountId: account.id, fleets: 0, error: message });
       }
-      results.push({ accountId: account.id, fleets: fleets.length });
     });
 
     return jsonResponse({ ok: true, results });
@@ -109,5 +114,6 @@ export async function POST(request: NextRequest) {
     return handleApiError(error);
   }
 }
+
 
 

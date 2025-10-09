@@ -68,22 +68,23 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const summary: Array<{ accountId: string; fleetId: string; synced: number }> = [];
+    const summary: Array<{ accountId: string; fleetId?: string; synced?: number; error?: string }> = [];
 
     await sequentialProcess(accounts, async (account) => {
-      const secret = decryptSecret(account.clientSecretEncrypted);
-      const accountScope = isOwner(context)
-        ? null
-        : context.scopes.filter((scope) => scope.accountId === account.id && scope.canRead);
-      const targetFleets = account.fleets.filter((fleet) => {
-        if (fleetFilter?.length && !fleetFilter.includes(fleet.id)) {
-          return false;
-        }
-        if (isOwner(context)) {
-          return true;
-        }
-        return accountScope?.some((scope) => scope.fleetId === null || scope.fleetId === fleet.id) ?? false;
-      });
+      try {
+        const secret = decryptSecret(account.clientSecretEncrypted);
+        const accountScope = isOwner(context)
+          ? null
+          : context.scopes.filter((scope) => scope.accountId === account.id && scope.canRead);
+        const targetFleets = account.fleets.filter((fleet) => {
+          if (fleetFilter?.length && !fleetFilter.includes(fleet.id)) {
+            return false;
+          }
+          if (isOwner(context)) {
+            return true;
+          }
+          return accountScope?.some((scope) => scope.fleetId === null || scope.fleetId === fleet.id) ?? false;
+        });
 
       await sequentialProcess(targetFleets, async (fleet) => {
         let sims;
@@ -140,6 +141,10 @@ export async function POST(request: NextRequest) {
 
         summary.push({ accountId: account.id, fleetId: fleet.id, synced: sims.length });
       });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "sync failed";
+        summary.push({ accountId: account.id, error: message });
+      }
     });
 
     return jsonResponse({ ok: true, summary });
