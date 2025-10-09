@@ -4,14 +4,18 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
 
-async function postJson(url: string) {
-  const response = await fetch(url, { method: "POST" });
+async function postJson(url: string, body?: unknown) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: payload ?? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     const message = body?.error ?? "Request failed";
     throw new Error(message);
   }
-  return body;
+  return data;
 }
 
 export function SyncControls() {
@@ -31,10 +35,22 @@ export function SyncControls() {
 
   const syncAll = useMutation({
     mutationFn: async () => {
-      // Run in sequence so dependencies are respected
-      await postJson("/api/accounts/sync");
-      await postJson("/api/fleets/sync");
-      await postJson("/api/sims/sync");
+      // 1) Discover accessible accounts from the server
+      const accountsRes = await fetch("/api/accounts", { cache: "no-store" });
+      const accountsBody = await accountsRes.json();
+      if (!accountsRes.ok) throw new Error(accountsBody?.error ?? "Failed to load accounts");
+      const accountIds: string[] = (accountsBody.accounts ?? []).map((a: { id: string }) => a.id);
+
+      // 2) If owner, sync accounts first (env -> DB)
+      if (canSyncAccounts) {
+        await postJson("/api/accounts/sync");
+      }
+
+      // 3) For each account, sync fleets then sims to keep requests shorter
+      for (const id of accountIds) {
+        await postJson("/api/fleets/sync", { accountIds: [id] });
+        await postJson("/api/sims/sync", { accountIds: [id] });
+      }
     },
     onMutate: () => toast.loading("Syncing everything...", { id: "sync-all" }),
     onSuccess: () => {
@@ -73,3 +89,4 @@ export function SyncControls() {
     </div>
   );
 }
+
