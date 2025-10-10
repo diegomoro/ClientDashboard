@@ -4,15 +4,15 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
 
-async function postJson(url: string, body?: unknown) {
+async function postJson(url: string, payload?: unknown) {
   const response = await fetch(url, {
     method: "POST",
-    headers: payload ?? { "Content-Type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
+    headers: payload ? { "Content-Type": "application/json" } : undefined,
+    body: payload ? JSON.stringify(payload) : undefined,
   });
-  const body = await response.json().catch(() => ({}));
+  const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message = body?.error ?? "Request failed";
+    const message = (data as any)?.error ?? "Request failed";
     throw new Error(message);
   }
   return data;
