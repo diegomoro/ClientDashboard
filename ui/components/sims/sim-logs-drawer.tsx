@@ -64,7 +64,7 @@ export function SimLogsDrawer({ target, onClose }: { target: SimLogTarget | null
   return (
     <div
       className={clsx(
-        "fixed inset-y-0 right-0 z-40 w-96 transform border-l border-neutral-200 bg-white shadow-xl transition-transform",
+        "fixed inset-y-0 right-0 z-40 w-full sm:w-96 transform border-l border-neutral-200 bg-white shadow-xl transition-transform",
         open ? "translate-x-0" : "translate-x-full",
       )}
       role="dialog"

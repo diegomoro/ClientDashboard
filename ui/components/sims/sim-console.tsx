@@ -66,6 +66,7 @@ async function fetchSims() {
 async function sendCommand(payload: {
   command: string;
   text?: string;
+  password?: string;
   accountScopedTargets: Array<{
     accountId: string;
     simIds: string[];
@@ -95,6 +96,7 @@ export function SimConsole({ hasAccess }: { hasAccess: boolean }) {
   const selection = useSelection<SimRecord>();
   const [search, setSearch] = useState("");
   const [command, setCommand] = useState(COMMAND_OPTIONS[0]?.value ?? "accinfo");
+  const [password, setPassword] = useState("");
   const [textPayload, setTextPayload] = useState("");
   const [lastResults, setLastResults] = useState<CommandResult[]>([]);
   const [logsTarget, setLogsTarget] = useState<SimLogTarget | null>(null);
@@ -103,12 +105,15 @@ export function SimConsole({ hasAccess }: { hasAccess: boolean }) {
   const [fleetFilter, setFleetFilter] = useState<string>("");
   const searchParams = useSearchParams();
   const router = useRouter();
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
 
   const simsQuery = useQuery({
     queryKey: ["sims"],
     queryFn: fetchSims,
     enabled: hasAccess,
-    staleTime: 30_000,
+    // Reduce Neon reads: cache longer, no polling
+    staleTime: 10 * 60_000,
+    refetchInterval: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
@@ -117,7 +122,7 @@ export function SimConsole({ hasAccess }: { hasAccess: boolean }) {
     queryKey: ["accounts"],
     queryFn: fetchAccounts,
     enabled: hasAccess,
-    staleTime: 60_000,
+    staleTime: 10 * 60_000,
   });
 
   const mutation = useMutation({
@@ -167,7 +172,8 @@ export function SimConsole({ hasAccess }: { hasAccess: boolean }) {
       return fetchFleets(ids);
     },
     enabled: hasAccess && sims.length > 0,
-    staleTime: 60_000,
+    staleTime: 10 * 60_000,
+    refetchInterval: false,
   });
 
   const fleetOptions = useMemo(() => {
@@ -182,13 +188,34 @@ export function SimConsole({ hasAccess }: { hasAccess: boolean }) {
     if (!debouncedSearch) {
       return base;
     }
-    const query = debouncedSearch.toLowerCase();
-    return base.filter((sim) =>
-      [sim.uniqueName ?? "", sim.simSid, sim.iccid, sim.fleetName ?? "", sim.accountLabel]
+    const tokens = debouncedSearch
+      .toLowerCase()
+      .split(/[\s,\n\r\t]+/u)
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    if (tokens.length === 0) return base;
+
+    // If multiple tokens were pasted (e.g., from a spreadsheet), match any token
+    // and focus on identity fields (unique name, SIM SID, ICCID) for speed.
+    if (tokens.length > 1) {
+      return base.filter((sim) => {
+        const hay = [sim.uniqueName ?? "", sim.simSid, sim.iccid].join(" ").toLowerCase();
+        for (const tok of tokens) {
+          if (hay.includes(tok)) return true;
+        }
+        return false;
+      });
+    }
+
+    // Single token: search all common fields
+    const query = tokens[0]!;
+    return base.filter((sim) => {
+      const hay = [sim.uniqueName ?? "", sim.simSid, sim.iccid, sim.fleetName ?? "", sim.accountLabel]
         .join(" ")
-        .toLowerCase()
-        .includes(query),
-    );
+        .toLowerCase();
+      return hay.includes(query);
+    });
   }, [sims, debouncedSearch, accountFilter, fleetFilter]);
 
   const parentRef = useRef<HTMLDivElement | null>(null);
@@ -198,6 +225,48 @@ export function SimConsole({ hasAccess }: { hasAccess: boolean }) {
     estimateSize: () => 56,
     overscan: 12,
   });
+
+  // Read last sync timestamp and update when a manual sync completes
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined") {
+        const v = localStorage.getItem("last-sync-at");
+        if (v) setLastSyncedAt(v);
+        const onCompleted = (e: Event) => {
+          const detail = (e as CustomEvent).detail as { at?: string } | undefined;
+          if (detail?.at) setLastSyncedAt(detail.at);
+          else setLastSyncedAt(new Date().toISOString());
+        };
+        window.addEventListener("sync:completed", onCompleted as EventListener);
+        return () => window.removeEventListener("sync:completed", onCompleted as EventListener);
+      }
+    } catch {
+      // ignore
+    }
+    return () => {};
+  }, []);
+
+  // Select-all (filtered) support
+  const selectedInFilteredCount = useMemo(() => {
+    if (!filtered.length) return 0;
+    let c = 0;
+    for (const s of filtered) if (selection.isSelected(s.id)) c += 1;
+    return c;
+  }, [filtered, selection.items]);
+  const allFilteredSelected = filtered.length > 0 && selectedInFilteredCount === filtered.length;
+  const someFilteredSelected = selectedInFilteredCount > 0 && !allFilteredSelected;
+  const headerSelectRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (headerSelectRef.current) headerSelectRef.current.indeterminate = someFilteredSelected;
+  }, [someFilteredSelected]);
+  const handleToggleAllFiltered = () => {
+    if (!filtered.length) return;
+    if (allFilteredSelected) {
+      selection.removeMany(filtered.map((s) => s.id));
+    } else {
+      selection.addMany(filtered);
+    }
+  };
 
   const timersRef = useRef<number[]>([]);
   function scheduleResultChecks(results: CommandResult[]) {
@@ -310,6 +379,7 @@ export function SimConsole({ hasAccess }: { hasAccess: boolean }) {
     mutation.mutate({
       command,
       text: command === "custom" ? textPayload : undefined,
+      password: password || undefined,
       accountScopedTargets: Array.from(grouped.entries()).map(([accountId, simIds]) => ({ accountId, simIds })),
     });
   };
@@ -326,8 +396,8 @@ export function SimConsole({ hasAccess }: { hasAccess: boolean }) {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
-        <div className="grid grid-cols-[1fr_1fr_auto_auto] items-end gap-3">
-          <label className="flex min-w-[220px] flex-col gap-1 text-sm font-medium text-neutral-700">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto_auto] items-end gap-3">
+          <label className="flex min-w-0 sm:min-w-[220px] flex-col gap-1 text-sm font-medium text-neutral-700">
             Command
             <select
               className="h-10 rounded-md border border-neutral-300 px-3 text-sm focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200"
@@ -351,7 +421,18 @@ export function SimConsole({ hasAccess }: { hasAccess: boolean }) {
               <option value="custom">custom</option>
             </select>
           </label>
-          <label className="flex min-w-[220px] flex-col gap-1 text-sm font-medium text-neutral-700">
+          <label className="flex min-w-0 sm:min-w-[220px] flex-col gap-1 text-sm font-medium text-neutral-700">
+            Password (no spaces)
+            <input
+              type="password"
+              className="h-10 w-full rounded-md border border-neutral-300 px-3 text-sm focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200"
+              value={password}
+              onChange={(event) => setPassword(event.currentTarget.value)}
+              placeholder="Optional"
+              autoComplete="off"
+            />
+          </label>
+          <label className="flex min-w-0 sm:min-w-[220px] flex-col gap-1 text-sm font-medium text-neutral-700">
             Payload / Custom text
             <input
               className={clsx(
@@ -425,9 +506,9 @@ export function SimConsole({ hasAccess }: { hasAccess: boolean }) {
       <div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
         <div>
           <div className="text-sm font-medium text-neutral-700">Search</div>
-          <div className="mt-1 grid grid-cols-[220px_220px_1fr_auto] items-center gap-3">
+          <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[220px_220px_1fr_auto] items-center gap-3">
             <select
-              className="h-10 w-[220px] rounded-md border border-neutral-300 bg-white px-3 text-sm text-neutral-900 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200"
+              className="h-10 w-full rounded-md border border-neutral-300 bg-white px-3 text-sm text-neutral-900 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200"
               value={accountFilter}
               onChange={(e) => setAccountFilter(e.currentTarget.value)}
             >
@@ -439,7 +520,7 @@ export function SimConsole({ hasAccess }: { hasAccess: boolean }) {
               ))}
             </select>
             <select
-              className="h-10 w-[220px] rounded-md border border-neutral-300 bg-white px-3 text-sm text-neutral-900 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200"
+              className="h-10 w-full rounded-md border border-neutral-300 bg-white px-3 text-sm text-neutral-900 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200"
               value={fleetFilter}
               onChange={(e) => setFleetFilter(e.currentTarget.value)}
               disabled={!accountFilter && fleetOptions.length === 0}
@@ -458,18 +539,28 @@ export function SimConsole({ hasAccess }: { hasAccess: boolean }) {
               ref={searchRef}
               onChange={(event) => setSearch(event.currentTarget.value)}
             />
-            <div className="h-10 flex items-center justify-end">
+            <div className="min-h-10 flex flex-col items-end justify-center">
               <p className="whitespace-nowrap text-sm text-neutral-500">{selection.count} selected of {sims.length} SIMs</p>
+              <p className="whitespace-nowrap text-xs text-neutral-400">Last synced: {lastSyncedAt ? new Date(lastSyncedAt).toLocaleString() : "—"}</p>
             </div>
           </div>
         </div>
-        <div ref={parentRef} className="mt-4 h-[540px] overflow-auto">
-          <div className="sticky top-0 z-10 grid grid-cols-[40px_repeat(4,minmax(0,1fr))_100px] gap-4 border-b border-neutral-200 bg-neutral-50 px-2 py-2 text-xs font-semibold text-neutral-600">
-            <div></div>
+        <div ref={parentRef} className="mt-4 h-[540px] overflow-auto overflow-x-auto">
+          <div className="sticky top-0 z-10 grid min-w-[720px] grid-cols-[40px_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_max-content_80px] gap-4 border-b border-neutral-200 bg-neutral-50 px-2 py-2 text-xs font-semibold text-neutral-600">
+            <div>
+              <input
+                ref={headerSelectRef}
+                type="checkbox"
+                checked={allFilteredSelected}
+                onChange={handleToggleAllFiltered}
+                aria-label="Select all filtered SIMs"
+                title="Select all filtered SIMs"
+              />
+            </div>
             <div>Unique Name</div>
             <div>SIM SID</div>
             <div>ICCID</div>
-            <div>Status</div>
+            <div className="whitespace-nowrap">Status</div>
             <div className="text-right">Logs</div>
           </div>
           {simsQuery.isLoading ? (
@@ -493,7 +584,7 @@ export function SimConsole({ hasAccess }: { hasAccess: boolean }) {
                 <div
                   key={sim.id}
                   className={clsx(
-                    "absolute inset-x-0 grid grid-cols-[40px_repeat(4,minmax(0,1fr))_100px] items-center gap-4 border-b border-neutral-100 px-2 py-3 text-sm",
+                    "absolute inset-x-0 grid min-w-[720px] grid-cols-[40px_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_max-content_80px] items-center gap-4 border-b border-neutral-100 px-2 py-3 text-sm",
                     selected ? "bg-red-50" : "bg-white",
                   )}
                   style={{ transform: `translateY(${virtualRow.start}px)` }}
@@ -506,28 +597,40 @@ export function SimConsole({ hasAccess }: { hasAccess: boolean }) {
                       aria-label={`Select SIM ${sim.iccid}`}
                     />
                   </div>
-                  <div className="text-neutral-900">{sim.uniqueName ?? "-"}</div>
-                  <div className="font-mono text-xs text-neutral-900">
+                  <div className="min-w-0 text-neutral-900">
+                    <span className="block truncate" title={sim.uniqueName ?? "-"}>
+                      {sim.uniqueName ?? "-"}
+                    </span>
+                  </div>
+                  <div className="min-w-0 text-neutral-900">
                     <button
                       type="button"
-                      title="Copy SIM SID"
-                      onClick={async () => { await navigator.clipboard.writeText(sim.simSid); toast.success("SIM SID copied"); }}
-                      className="underline-offset-2 hover:underline"
+                      aria-label="Copy SIM SID"
+                      title={sim.simSid}
+                      onClick={async () => {
+                        await navigator.clipboard.writeText(sim.simSid);
+                        toast.success("SIM SID copied");
+                      }}
+                      className="block w-full truncate text-left font-mono text-xs underline-offset-2 hover:underline"
                     >
                       {sim.simSid}
                     </button>
                   </div>
-                  <div className="font-mono text-xs text-neutral-900">
+                  <div className="min-w-0 text-neutral-900">
                     <button
                       type="button"
-                      title="Copy ICCID"
-                      onClick={async () => { await navigator.clipboard.writeText(sim.iccid); toast.success("ICCID copied"); }}
-                      className="underline-offset-2 hover:underline"
+                      aria-label="Copy ICCID"
+                      title={sim.iccid}
+                      onClick={async () => {
+                        await navigator.clipboard.writeText(sim.iccid);
+                        toast.success("ICCID copied");
+                      }}
+                      className="block w-full truncate text-left font-mono text-xs underline-offset-2 hover:underline"
                     >
                       {sim.iccid}
                     </button>
                   </div>
-                  <div className="text-neutral-900"><Badge color={sim.status === "active" ? "green" : sim.status === "inactive" ? "neutral" : "amber"}>{sim.status}</Badge></div>
+                  <div className="text-neutral-900 whitespace-nowrap justify-self-start"><Badge color={sim.status === "active" ? "green" : sim.status === "inactive" ? "neutral" : "amber"}>{sim.status}</Badge></div>
                   <div className="text-right">
                     <button
                       type="button"

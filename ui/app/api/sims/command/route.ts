@@ -20,6 +20,7 @@ const TargetSchema = z.object({
 const BodySchema = z.object({
   command: z.string().min(1),
   text: z.string().max(160).optional(),
+  password: z.string().max(64).optional(),
   accountScopedTargets: z.array(TargetSchema).min(1),
   throttle: z
     .object({
@@ -179,10 +180,14 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // Device command string: for catalog commands, payload equals the command name;
-        // for custom, payload equals the custom text.
-        const commandToSend = command === "custom" ? body.text!.trim() : command;
-        const payloadText = command === "custom" ? body.text!.trim() : command;
+        // Device command string: for catalog commands, payload equals the command name.
+        // for custom, payload equals the custom text. If a password (no spaces) is provided,
+        // prefix the payload with "<password> ".
+        const baseText = command === "custom" ? body.text!.trim() : command;
+        const pwRaw = (body.password ?? "").trim();
+        const includePw = pwRaw.length > 0 && !/\s/u.test(pwRaw);
+        const commandToSend = baseText;
+        const payloadText = includePw ? `${pwRaw} ${baseText}` : baseText;
         const dispatchStartedAt = new Date().toISOString();
 
         try {

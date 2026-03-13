@@ -90,6 +90,7 @@ model Sim {
   @@index([accountId, simSid])
   @@index([accountId, iccid])
   @@index([accountId, uniqueName])
+  @@index([accountId, fleetId])
 }
 
 model CommandLog {
