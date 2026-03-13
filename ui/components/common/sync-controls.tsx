@@ -43,18 +43,16 @@ export function SyncControls() {
 
   const syncAll = useMutation({
     mutationFn: async () => {
-      // 1) Discover accessible accounts from the server
+      // 1) If owner, sync accounts first (env -> DB), then fetch the full, current list
+      if (canSyncAccounts) {
+        await postJson("/api/accounts/sync");
+      }
       const accountsRes = await fetch("/api/accounts", { cache: "no-store" });
       const accountsBody = await accountsRes.json();
       if (!accountsRes.ok) throw new Error(accountsBody?.error ?? "Failed to load accounts");
       const accountIds: string[] = (accountsBody.accounts ?? []).map((a: { id: string }) => a.id);
 
-      // 2) If owner, sync accounts first (env -> DB)
-      if (canSyncAccounts) {
-        await postJson("/api/accounts/sync");
-      }
-
-      // 3) For each account, sync fleets then sims to keep requests shorter
+      // 2) For each account, sync fleets then sims to keep requests shorter
       for (const id of accountIds) {
         await postJson("/api/fleets/sync", { accountIds: [id] });
         await postJson("/api/sims/sync", { accountIds: [id] });
@@ -66,6 +64,15 @@ export function SyncControls() {
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
       queryClient.invalidateQueries({ queryKey: ["fleets"] });
       queryClient.invalidateQueries({ queryKey: ["sims"] });
+      try {
+        const ts = new Date().toISOString();
+        if (typeof window !== "undefined") {
+          localStorage.setItem("last-sync-at", ts);
+          window.dispatchEvent(new CustomEvent("sync:completed", { detail: { at: ts } }));
+        }
+      } catch {
+        // ignore
+      }
     },
     onError: (error: unknown) => {
       toast.error(error instanceof Error ? error.message : "Sync failed", { id: "sync-all" });
@@ -91,7 +98,7 @@ export function SyncControls() {
           disabled={syncAll.isPending || syncAccounts.isPending || syncFleets.isPending || syncSims.isPending}
           className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-red-300"
         >
-          {syncAll.isPending ? "Syncing SIMs..." : "Sync SIMs"}
+          {syncAll.isPending ? "Syncing..." : "Sync SIMs & Fleets"}
         </button>
       )}
     </div>
